@@ -1,0 +1,17 @@
+services:
+  newapi-checkin:
+    build: .
+    container_name: newapi-checkin
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      APP_NAME: "New API Auto Check-in"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "change-this-password"
+      SESSION_TTL_SECONDS: "604800"
+      LOG_RETENTION_DAYS: "7"
+      SCHEDULE_CRON: "0 8 * * *"
+      SQLITE_PATH: "/data/newapi-checkin.sqlite"
+    volumes:
+      - ./data:/data

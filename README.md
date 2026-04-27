@@ -52,8 +52,11 @@ New-Api-User: {user_id}
 ```text
 .
 ├── src/index.ts        # Worker 入口、API、签到逻辑和 WebUI
+├── src/server.ts       # 服务器版入口，使用 SQLite 模拟 D1
 ├── schema.sql          # D1 表结构
 ├── wrangler.toml       # Cloudflare Workers 配置
+├── Dockerfile          # 服务器版 Docker 镜像
+├── docker-compose.yml  # 服务器版 Compose 示例
 ├── package.json        # npm 脚本和依赖
 ├── .dev.vars.example   # 本地开发环境变量示例
 └── README.md
@@ -166,6 +169,68 @@ npm run deploy
 部署完成后，Wrangler 会输出 `workers.dev` 地址和 Cron 配置。
 
 如果你准备公开仓库，请不要把自己的真实 Worker 地址、账号 ID、D1 `database_id` 或后台密码写入 README、`wrangler.toml` 或提交历史。
+
+## 服务器部署
+
+除了 Cloudflare Workers，本项目也提供服务器版。服务器版使用 Node.js 内置 SQLite 数据库，Web 管理页和 API 与 Workers 版本保持一致。
+
+服务器版要求 Node.js `24+`。如果使用 Docker，镜像已经基于 `node:24-bookworm-slim`。
+
+### Docker Compose
+
+编辑 `docker-compose.yml`，至少修改后台密码：
+
+```yaml
+environment:
+  ADMIN_USERNAME: "admin"
+  ADMIN_PASSWORD: "change-this-password"
+```
+
+启动：
+
+```bash
+docker compose up -d --build
+```
+
+访问：
+
+```text
+http://localhost:3000
+```
+
+数据会持久化到本地 `./data/newapi-checkin.sqlite`。
+
+### Node 直接运行
+
+构建服务器版：
+
+```bash
+npm run build:server
+```
+
+启动：
+
+```bash
+ADMIN_USERNAME=admin ADMIN_PASSWORD=your-password npm run start:server
+```
+
+Windows PowerShell 示例：
+
+```powershell
+$env:ADMIN_USERNAME="admin"
+$env:ADMIN_PASSWORD="your-password"
+npm run start:server
+```
+
+服务器版常用环境变量：
+
+| 变量名 | 默认值 | 说明 |
+| --- | --- | --- |
+| `HOST` | `0.0.0.0` | 监听地址 |
+| `PORT` | `3000` | 监听端口 |
+| `SQLITE_PATH` | `./data/newapi-checkin.sqlite` | SQLite 数据库路径 |
+| `SCHEMA_PATH` | `./schema.sql` | 数据库初始化 SQL |
+| `SCHEDULE_CRON` | `0 8 * * *` | 定时任务，使用 UTC 时间 |
 
 ## 配置项
 
@@ -297,6 +362,9 @@ WebUI 支持上传 `.json` 文件或直接粘贴 JSON 数组。
 | 命令 | 说明 |
 | --- | --- |
 | `npm run dev` | 本地启动 Wrangler 开发服务 |
+| `npm run dev:server` | 本地启动服务器版开发服务 |
+| `npm run build:server` | 构建服务器版到 `dist/` |
+| `npm run start:server` | 运行已构建的服务器版 |
 | `npm run deploy` | 部署到 Cloudflare Workers |
 | `npm run db:migrate:local` | 初始化本地 D1 表结构 |
 | `npm run db:migrate:remote` | 初始化线上 D1 表结构 |

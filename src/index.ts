@@ -68,7 +68,7 @@ type CheckinResult = {
   completedAt: string;
 };
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+export const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -376,7 +376,7 @@ export default {
   },
 };
 
-async function runScheduled(env: Bindings) {
+export async function runScheduled(env: Bindings) {
   await cleanupOldLogs(env);
   const rows = await env.DB.prepare('SELECT id FROM sites WHERE enabled = 1 ORDER BY id ASC').all<{ id: number }>();
   const siteIds = (rows.results ?? []).map((item) => item.id);
@@ -986,18 +986,18 @@ function renderOptimizedAppHtml(appName: string, username: string) {
 
             document.getElementById('site-table').innerHTML = sites.length ? sites.map((site) =>
               '<tr>' +
-                '<td class="check-col"><input data-action="select" data-id="' + site.id + '" type="checkbox" ' + (state.selected.has(site.id) ? 'checked' : '') + ' /></td>' +
-                '<td><div class="primary-cell"><strong>' + escapeHtml(site.name) + '</strong><span>' + escapeHtml(site.base_url) + '</span><code>' + escapeHtml(maskToken(site.access_token)) + '</code></div></td>' +
-                '<td>#' + escapeHtml(site.user_id) + '</td>' +
-                '<td><div class="status-stack">' + (site.enabled ? '<span class="status-pill enabled">启用</span>' : '<span class="status-pill disabled">停用</span>') + statusPill(site.last_status || 'idle') + '</div></td>' +
-                '<td><div class="primary-cell"><span>' + escapeHtml(formatTime(site.last_checkin_at)) + '</span><small>' + escapeHtml(site.last_message || '-') + '</small></div></td>' +
-                '<td><div class="toolbar compact-actions">' +
+                '<td class="check-col" data-label="选择"><input data-action="select" data-id="' + site.id + '" type="checkbox" ' + (state.selected.has(site.id) ? 'checked' : '') + ' /></td>' +
+                '<td data-label="站点"><div class="primary-cell"><strong>' + escapeHtml(site.name) + '</strong><span>' + escapeHtml(site.base_url) + '</span><code>' + escapeHtml(maskToken(site.access_token)) + '</code></div></td>' +
+                '<td data-label="用户">#' + escapeHtml(site.user_id) + '</td>' +
+                '<td data-label="状态"><div class="status-stack">' + (site.enabled ? '<span class="status-pill enabled">启用</span>' : '<span class="status-pill disabled">停用</span>') + statusPill(site.last_status || 'idle') + '</div></td>' +
+                '<td data-label="最近执行"><div class="primary-cell"><span>' + escapeHtml(formatTime(site.last_checkin_at)) + '</span><small>' + escapeHtml(site.last_message || '-') + '</small></div></td>' +
+                '<td data-label="操作"><div class="toolbar compact-actions">' +
                   '<button data-action="run" data-id="' + site.id + '" class="ghost-btn" type="button">执行</button>' +
                   '<button data-action="edit" data-id="' + site.id + '" class="ghost-btn" type="button">编辑</button>' +
                   '<button data-action="delete" data-id="' + site.id + '" class="danger-btn" type="button">删除</button>' +
                 '</div></td>' +
               '</tr>'
-            ).join('') : '<tr><td colspan="6"><div class="empty-state">没有匹配的站点</div></td></tr>';
+            ).join('') : '<tr><td class="empty-cell" colspan="6"><div class="empty-state">没有匹配的站点</div></td></tr>';
           }
 
           function renderLogs() {
@@ -1007,15 +1007,15 @@ function renderOptimizedAppHtml(appName: string, username: string) {
             );
             document.getElementById('log-table').innerHTML = logs.length ? logs.map((item) =>
               '<tr>' +
-                '<td>' + escapeHtml(formatTime(item.requested_at)) + '</td>' +
-                '<td>' + escapeHtml(item.site_name) + '</td>' +
-                '<td>' + escapeHtml(item.trigger_type) + '</td>' +
-                '<td>' + statusPill(item.status) + '</td>' +
-                '<td>' + escapeHtml(item.http_status || '-') + '</td>' +
-                '<td>' + escapeHtml(item.quota_awarded || '-') + '</td>' +
-                '<td><div class="log-message">' + escapeHtml(item.response_message || '') + '</div><details><summary>响应体</summary><pre>' + escapeHtml(item.response_body || '') + '</pre></details></td>' +
+                '<td data-label="时间">' + escapeHtml(formatTime(item.requested_at)) + '</td>' +
+                '<td data-label="站点">' + escapeHtml(item.site_name) + '</td>' +
+                '<td data-label="触发">' + escapeHtml(item.trigger_type) + '</td>' +
+                '<td data-label="结果">' + statusPill(item.status) + '</td>' +
+                '<td data-label="HTTP">' + escapeHtml(item.http_status || '-') + '</td>' +
+                '<td data-label="额度">' + escapeHtml(item.quota_awarded || '-') + '</td>' +
+                '<td data-label="消息"><div class="log-message">' + escapeHtml(item.response_message || '') + '</div><details><summary>响应体</summary><pre>' + escapeHtml(item.response_body || '') + '</pre></details></td>' +
               '</tr>'
-            ).join('') : '<tr><td colspan="7"><div class="empty-state">暂无匹配日志</div></td></tr>';
+            ).join('') : '<tr><td class="empty-cell" colspan="7"><div class="empty-state">暂无匹配日志</div></td></tr>';
           }
 
           async function loadSummary() {
@@ -1851,7 +1851,8 @@ const optimizedStyles = `
     .sidebar {
       position: static;
       height: auto;
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
       border-right: 0;
       border-bottom: 1px solid var(--line);
     }
@@ -1859,9 +1860,17 @@ const optimizedStyles = `
     .nav-list {
       display: flex;
       overflow-x: auto;
+      gap: 8px;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+
+    .nav-list::-webkit-scrollbar {
+      display: none;
     }
 
     .nav-item {
+      flex: 0 0 auto;
       min-width: 88px;
       text-align: center;
     }
@@ -1888,12 +1897,13 @@ const optimizedStyles = `
   @media (max-width: 680px) {
     body {
       font-size: 13px;
+      background: var(--bg);
     }
 
     .main,
     .sidebar,
     .auth-panel {
-      padding: 16px;
+      padding: 12px;
     }
 
     .topbar,
@@ -1908,13 +1918,25 @@ const optimizedStyles = `
     }
 
     .metric-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric-card {
+      min-height: 88px;
+      padding: 12px;
+    }
+
+    .metric-card strong {
+      margin-top: 10px;
+      font-size: 18px;
     }
 
     .topbar-actions,
     .toolbar,
     .filters {
       align-items: stretch;
+      width: 100%;
     }
 
     .topbar-actions > *,
@@ -1923,8 +1945,193 @@ const optimizedStyles = `
       flex: 1 1 auto;
     }
 
+    .topbar {
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .topbar-actions form,
+    .topbar-actions form button {
+      width: 100%;
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .brand > div:last-child {
+      min-width: 0;
+    }
+
+    .brand strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav-item,
+    .primary-btn,
+    .ghost-btn,
+    .danger-btn {
+      min-height: 44px;
+    }
+
+    .surface {
+      border-radius: 8px;
+      box-shadow: none;
+    }
+
+    .section-head {
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .filters {
+      padding: 0 14px 14px;
+    }
+
+    .filters input,
+    .filters select,
+    .toolbar input {
+      max-width: none;
+    }
+
+    .field-stack,
+    .import-grid {
+      padding: 14px;
+    }
+
+    .upload-box {
+      min-height: 112px;
+    }
+
+    #import-json {
+      min-height: 260px;
+    }
+
+    .table-wrap {
+      overflow: visible;
+      border-top: 0;
+      padding: 0 12px 12px;
+    }
+
+    table,
+    tbody,
+    tr,
+    td {
+      display: block;
+      width: 100%;
+      min-width: 0;
+    }
+
+    table {
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    thead {
+      display: none;
+    }
+
+    tr {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    td {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 9px 0;
+      border-bottom: 1px solid #eef2f7;
+    }
+
+    td:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    td::before {
+      content: attr(data-label);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .check-col {
+      width: 100%;
+    }
+
+    .check-col input {
+      margin-top: 2px;
+    }
+
+    .empty-cell {
+      display: block;
+      padding: 0;
+    }
+
+    .empty-cell::before {
+      content: none;
+    }
+
+    .primary-cell {
+      min-width: 0;
+    }
+
+    .primary-cell strong,
+    .primary-cell span,
+    .primary-cell small,
+    .log-message,
+    code {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .status-stack {
+      gap: 5px;
+    }
+
     .compact-actions {
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      width: 100%;
+    }
+
+    .compact-actions button {
+      padding: 0 8px;
+      min-width: 0;
+    }
+
+    .compact-row {
+      align-items: flex-start;
+    }
+
+    .notice-line {
+      top: auto;
+      right: 12px;
+      bottom: 12px;
+      left: 12px;
+      max-width: none;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .metric-grid {
+      grid-template-columns: 1fr;
+    }
+
+    td {
+      grid-template-columns: 72px minmax(0, 1fr);
+    }
+
+    .compact-actions {
+      grid-template-columns: 1fr;
     }
   }
 `;
