@@ -1,0 +1,28 @@
+{
+  "name": "newapicheckin",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers based New API auto check-in dashboard",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 execute newapi-checkin-db --local --file=./schema.sql",
+    "db:migrate:remote": "wrangler d1 execute newapi-checkin-db --remote --file=./schema.sql",
+    "cf-typegen": "wrangler types"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
+    "hono": "^4.12.15",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260425.1",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.85.0"
+  }
+}
