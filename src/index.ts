@@ -832,9 +832,17 @@ function renderOptimizedAppHtml(appName: string, username: string) {
                   </div>
                   <div class="toolbar">
                     <input id="log-search" type="search" placeholder="搜索日志" />
+                    <select id="log-filter" aria-label="日志状态筛选">
+                      <option value="all">全部结果</option>
+                      <option value="success">仅成功</option>
+                      <option value="failed">失败/错误</option>
+                      <option value="manual">手动触发</option>
+                      <option value="cron">定时触发</option>
+                    </select>
                     <button id="refresh-logs" class="ghost-btn" type="button">刷新</button>
                   </div>
                 </div>
+                <div class="log-summary" id="log-summary"></div>
                 <div class="table-wrap">
                   <table>
                     <thead>
@@ -863,7 +871,8 @@ function renderOptimizedAppHtml(appName: string, username: string) {
             selected: new Set(),
             siteQuery: '',
             siteFilter: 'all',
-            logQuery: ''
+            logQuery: '',
+            logFilter: 'all'
           };
 
           const statusLabels = {
@@ -1003,19 +1012,45 @@ function renderOptimizedAppHtml(appName: string, username: string) {
           function renderLogs() {
             const query = state.logQuery.trim().toLowerCase();
             const logs = state.logs.filter((item) =>
-              !query || [item.site_name, item.trigger_type, item.status, item.response_message, item.response_body].join(' ').toLowerCase().includes(query)
+              (!query || [item.site_name, item.trigger_type, item.status, item.response_message, item.response_body, item.http_status, item.quota_awarded].join(' ').toLowerCase().includes(query)) &&
+              (
+                state.logFilter === 'all' ||
+                (state.logFilter === 'success' && item.status === 'success') ||
+                (state.logFilter === 'failed' && ['failed', 'error'].includes(item.status)) ||
+                (state.logFilter === 'manual' && ['manual', 'manual-all'].includes(item.trigger_type)) ||
+                (state.logFilter === 'cron' && item.trigger_type === 'cron')
+              )
             );
+            renderLogSummary(logs);
             document.getElementById('log-table').innerHTML = logs.length ? logs.map((item) =>
               '<tr>' +
-                '<td data-label="时间">' + escapeHtml(formatTime(item.requested_at)) + '</td>' +
-                '<td data-label="站点">' + escapeHtml(item.site_name) + '</td>' +
+                '<td data-label="时间"><div class="log-time">' + escapeHtml(formatTime(item.requested_at)) + '<span>' + escapeHtml(item.completed_at ? formatTime(item.completed_at) : '-') + '</span></div></td>' +
+                '<td data-label="站点"><strong class="log-site">' + escapeHtml(item.site_name) + '</strong></td>' +
                 '<td data-label="触发">' + escapeHtml(item.trigger_type) + '</td>' +
                 '<td data-label="结果">' + statusPill(item.status) + '</td>' +
                 '<td data-label="HTTP">' + escapeHtml(item.http_status || '-') + '</td>' +
                 '<td data-label="额度">' + escapeHtml(item.quota_awarded || '-') + '</td>' +
-                '<td data-label="消息"><div class="log-message">' + escapeHtml(item.response_message || '') + '</div><details><summary>响应体</summary><pre>' + escapeHtml(item.response_body || '') + '</pre></details></td>' +
+                '<td data-label="消息"><div class="log-message">' + escapeHtml(item.response_message || '-') + '</div><details class="response-details"><summary>响应体</summary><pre>' + escapeHtml(item.response_body || '') + '</pre></details></td>' +
               '</tr>'
             ).join('') : '<tr><td class="empty-cell" colspan="7"><div class="empty-state">暂无匹配日志</div></td></tr>';
+          }
+
+          function renderLogSummary(logs) {
+            const total = logs.length;
+            const success = logs.filter((item) => item.status === 'success').length;
+            const failed = logs.filter((item) => ['failed', 'error'].includes(item.status)).length;
+            const cron = logs.filter((item) => item.trigger_type === 'cron').length;
+            const manual = logs.filter((item) => ['manual', 'manual-all'].includes(item.trigger_type)).length;
+            const items = [
+              ['当前显示', total],
+              ['成功', success],
+              ['失败/错误', failed],
+              ['手动', manual],
+              ['定时', cron]
+            ];
+            document.getElementById('log-summary').innerHTML = items.map(([label, value]) =>
+              '<div class="log-summary-item"><span>' + label + '</span><strong>' + value + '</strong></div>'
+            ).join('');
           }
 
           async function loadSummary() {
@@ -1129,6 +1164,11 @@ function renderOptimizedAppHtml(appName: string, username: string) {
 
           document.getElementById('log-search').addEventListener('input', (event) => {
             state.logQuery = event.target.value;
+            renderLogs();
+          });
+
+          document.getElementById('log-filter').addEventListener('change', (event) => {
+            state.logFilter = event.target.value;
             renderLogs();
           });
 
@@ -1781,9 +1821,60 @@ const optimizedStyles = `
     max-width: 220px;
   }
 
+  .log-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    background: #fbfcfe;
+  }
+
+  .log-summary-item {
+    display: grid;
+    gap: 4px;
+    min-height: 56px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #fff;
+  }
+
+  .log-summary-item span {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .log-summary-item strong {
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .log-time {
+    display: grid;
+    gap: 3px;
+    min-width: 150px;
+  }
+
+  .log-time span {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .log-site {
+    display: inline-block;
+    max-width: 180px;
+    overflow-wrap: anywhere;
+  }
+
   .log-message {
     max-width: 360px;
     color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .response-details {
+    max-width: 520px;
   }
 
   details summary {
@@ -1794,6 +1885,12 @@ const optimizedStyles = `
 
   pre {
     max-width: 520px;
+    max-height: 260px;
+    overflow: auto;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #f8fafc;
     white-space: pre-wrap;
     word-break: break-word;
     font-size: 12px;
@@ -1887,6 +1984,10 @@ const optimizedStyles = `
     .workspace-grid,
     .import-grid {
       grid-template-columns: 1fr;
+    }
+
+    .log-summary {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .sticky-panel {
@@ -1992,7 +2093,8 @@ const optimizedStyles = `
 
     .filters input,
     .filters select,
-    .toolbar input {
+    .toolbar input,
+    .toolbar select {
       max-width: none;
     }
 
@@ -2013,6 +2115,21 @@ const optimizedStyles = `
       overflow: visible;
       border-top: 0;
       padding: 0 12px 12px;
+    }
+
+    .log-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .log-summary-item {
+      min-height: 52px;
+      padding: 9px 10px;
+    }
+
+    .log-summary-item strong {
+      font-size: 16px;
     }
 
     table,
@@ -2086,10 +2203,25 @@ const optimizedStyles = `
     .primary-cell strong,
     .primary-cell span,
     .primary-cell small,
+    .log-site,
+    .log-time,
     .log-message,
     code {
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+
+    .log-time {
+      min-width: 0;
+    }
+
+    .response-details {
+      max-width: 100%;
+    }
+
+    pre {
+      max-width: 100%;
+      max-height: 220px;
     }
 
     .status-stack {
@@ -2123,6 +2255,10 @@ const optimizedStyles = `
 
   @media (max-width: 420px) {
     .metric-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .log-summary {
       grid-template-columns: 1fr;
     }
 
