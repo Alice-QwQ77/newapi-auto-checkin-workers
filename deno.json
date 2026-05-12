@@ -4,13 +4,10 @@
     "check": "deno check --unstable-kv src/deno.ts",
     "migrate:postgres": "deno run --allow-net --allow-env src/migrate-postgres.ts"
   },
+  "nodeModulesDir": "none",
   "imports": {
     "hono": "npm:hono@^4.12.15",
     "hono/": "npm:hono@^4.12.15/",
     "zod": "npm:zod@^4.3.6"
-  },
-  "deploy": {
-    "org": "alice-qwq77",
-    "app": "new-api-auto-check-in"
   }
 }
