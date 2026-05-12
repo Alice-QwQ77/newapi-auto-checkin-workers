@@ -3,3 +3,10 @@ ADMIN_PASSWORD=change-this-password
 # 推荐改用哈希：
 # ADMIN_PASSWORD_HASH=<sha256-hex>
 SESSION_TTL_SECONDS=604800
+LOG_RETENTION_DAYS=7
+DATABASE_BACKEND=auto
+# Deno PostgreSQL 模式可使用 Deno Deploy 自动注入的 DATABASE_URL / PG*：
+# DATABASE_URL=postgresql://user:password@localhost:5432/newapi_checkin
+
+# Deno Deploy 定时触发接口使用：
+# CRON_SECRET=<random-secret>

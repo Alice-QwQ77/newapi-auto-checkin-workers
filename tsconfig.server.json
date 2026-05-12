@@ -8,5 +8,5 @@
     "types": ["node", "@cloudflare/workers-types"],
     "noEmit": false
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/app.ts", "src/server.ts"]
 }

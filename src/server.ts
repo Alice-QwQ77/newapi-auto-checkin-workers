@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue } from 'node:sqlite';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { app, runScheduled } from './index.js';
+import { app, runScheduled, type Bindings, type D1PreparedStatementLike } from './app.js';
 
 type SqliteRunResult = {
   success: true;
@@ -37,12 +37,16 @@ class SqliteD1Database {
     return new SqliteD1PreparedStatement(this.db, query);
   }
 
-  async batch(statements: SqliteD1PreparedStatement[]) {
-    return statements.map((statement) => statement.runSync());
+  async batch(statements: D1PreparedStatementLike[]) {
+    const results = [];
+    for (const statement of statements) {
+      results.push(await statement.run());
+    }
+    return results;
   }
 }
 
-class SqliteD1PreparedStatement {
+class SqliteD1PreparedStatement implements D1PreparedStatementLike {
   private params: SQLInputValue[] = [];
 
   constructor(
@@ -67,8 +71,8 @@ class SqliteD1PreparedStatement {
     return (this.db.prepare(this.query).get(...this.params) as T | undefined) ?? null;
   }
 
-  async run(): Promise<SqliteRunResult> {
-    return this.runSync();
+  async run<T = unknown>(): Promise<{ meta: { last_row_id?: number } } & T> {
+    return this.runSync() as unknown as { meta: { last_row_id?: number } } & T;
   }
 
   runSync(): SqliteRunResult {
@@ -83,16 +87,6 @@ class SqliteD1PreparedStatement {
   }
 }
 
-type ServerEnv = {
-  DB: D1Database;
-  APP_NAME: string;
-  ADMIN_USERNAME?: string;
-  ADMIN_PASSWORD?: string;
-  ADMIN_PASSWORD_HASH?: string;
-  SESSION_TTL_SECONDS?: string;
-  LOG_RETENTION_DAYS?: string;
-};
-
 const port = Number(process.env.PORT || '3000');
 const host = process.env.HOST || '0.0.0.0';
 const databasePath = resolve(process.env.SQLITE_PATH || './data/newapi-checkin.sqlite');
@@ -102,8 +96,8 @@ const schedule = process.env.SCHEDULE_CRON || '0 8 * * *';
 const sqlite = new SqliteD1Database(databasePath);
 sqlite.migrate(schemaPath);
 
-const env: ServerEnv = {
-  DB: sqlite as unknown as D1Database,
+const env: Bindings = {
+  DB: sqlite,
   APP_NAME: process.env.APP_NAME || 'New API Auto Check-in',
   ADMIN_USERNAME: process.env.ADMIN_USERNAME,
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,

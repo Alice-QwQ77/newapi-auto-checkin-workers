@@ -10,6 +10,9 @@
     "build:server": "tsc -p tsconfig.server.json",
     "start:server": "node dist/server.js",
     "deploy": "wrangler deploy",
+    "deno:dev": "deno task dev",
+    "deno:check": "deno task check",
+    "deno:migrate:postgres": "deno task migrate:postgres",
     "db:migrate:local": "wrangler d1 execute newapi-checkin-db --local --file=./schema.sql",
     "db:migrate:remote": "wrangler d1 execute newapi-checkin-db --remote --file=./schema.sql",
     "cf-typegen": "wrangler types"
@@ -22,11 +25,13 @@
     "@hono/node-server": "^2.0.0",
     "@hono/zod-validator": "^0.7.6",
     "hono": "^4.12.15",
+    "pg": "^8.16.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260425.1",
     "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "wrangler": "^4.85.0"

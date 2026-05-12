@@ -1,13 +1,13 @@
 # New API Auto Check-in
 
-一个部署在 Cloudflare Workers 上的 New API 自动签到管理台。项目使用 `D1` 保存站点、日志和登录会话，提供 Web 管理页用于查看状态、导入站点、手动执行签到、批量签到和查看运行日志。
+一个可部署在 Cloudflare Workers 或 Deno Deploy 上的 New API 自动签到管理台。Cloudflare 环境使用 `D1` 保存站点、日志和登录会话，Deno 环境可使用 `Deno KV` 或 `PostgreSQL` 保存同等数据；Web 管理页用于查看状态、导入站点、手动执行签到、批量签到和查看运行日志。
 
-当前定时任务配置为每天北京时间 `16:00` 自动执行签到，签到日志默认保留最近 `7` 天。后台用户名通过 Cloudflare Secret `ADMIN_USERNAME` 配置，后台密码通过 `ADMIN_PASSWORD` 或 `ADMIN_PASSWORD_HASH` 配置。
+当前定时任务配置为每天北京时间 `08:00` 自动执行签到，签到日志默认保留最近 `7` 天。后台用户名通过 Cloudflare Secret `ADMIN_USERNAME` 配置，后台密码通过 `ADMIN_PASSWORD` 或 `ADMIN_PASSWORD_HASH` 配置。
 
 ## 功能特性
 
 - Web 登录鉴权后台
-- 使用 Cloudflare D1 持久化数据
+- 使用 Cloudflare D1、Deno KV 或 PostgreSQL 持久化数据
 - 新增、编辑、删除 New API 站点
 - 保存站点 URL、系统访问令牌、用户 ID、启用状态和备注
 - 查看站点总数、启用数量、24 小时执行次数和成功次数
@@ -17,7 +17,7 @@
 - 上传或粘贴 JSON 批量导入站点
 - 查看最近运行日志、HTTP 状态、返回消息、额度结果和响应体
 - 每天定时自动签到
-- 自动清理过期日志，避免 D1 持续膨胀
+- 自动清理过期日志，避免存储持续膨胀
 
 ## 签到认证要求
 
@@ -42,6 +42,8 @@ New-Api-User: {user_id}
 - Cloudflare Workers
 - Cloudflare D1
 - Cloudflare Cron Triggers
+- Deno Deploy
+- Deno KV
 - Hono
 - Zod
 - TypeScript
@@ -51,8 +53,13 @@ New-Api-User: {user_id}
 
 ```text
 .
-├── src/index.ts        # Worker 入口、API、签到逻辑和 WebUI
+├── src/app.ts          # 共享 API、签到逻辑和 WebUI
+├── src/index.ts        # Cloudflare Workers 入口
 ├── src/server.ts       # 服务器版入口，使用 SQLite 模拟 D1
+├── src/deno.ts         # Deno Deploy 入口
+├── src/deno-kv-d1.ts   # Deno KV 到 D1 查询接口的兼容层
+├── src/postgres-d1.ts  # PostgreSQL 到 D1 查询接口的兼容层
+├── deno.json           # Deno 本地开发和依赖映射
 ├── schema.sql          # D1 表结构
 ├── wrangler.toml       # Cloudflare Workers 配置
 ├── Dockerfile          # 服务器版 Docker 镜像
@@ -96,7 +103,29 @@ npm run db:migrate:local
 npm run dev
 ```
 
+### Deno 本地开发
+
+本地需要先安装 Deno。复制 `.dev.vars.example` 后，可以把变量放到当前终端环境中，或直接用命令行临时设置：
+
+```powershell
+$env:ADMIN_USERNAME="admin"
+$env:ADMIN_PASSWORD="your-local-password"
+$env:CRON_SECRET="your-random-secret"
+npm run deno:dev
+```
+
+Deno 入口默认使用本地 Deno KV，不需要执行 `schema.sql`。如果要用本地 PostgreSQL：
+
+```powershell
+$env:DATABASE_BACKEND="postgres"
+$env:DATABASE_URL="postgresql://user:password@localhost:5432/newapi_checkin"
+npm run deno:migrate:postgres
+npm run deno:dev
+```
+
 ## 从零部署
+
+以下是 Cloudflare Workers 部署流程。如果部署到 Deno Deploy，请看后面的 “Deno Deploy 部署”。
 
 ### 1. 登录 Cloudflare
 
@@ -232,6 +261,61 @@ npm run start:server
 | `SCHEMA_PATH` | `./schema.sql` | 数据库初始化 SQL |
 | `SCHEDULE_CRON` | `0 8 * * *` | 定时任务，使用 UTC 时间 |
 
+## Deno Deploy 部署
+
+### 1. 创建项目
+
+在 Deno Deploy 新建项目，入口文件选择：
+
+```text
+src/deno.ts
+```
+
+项目会通过 `deno.json` 加载 `hono`、`zod`，PostgreSQL 模式会使用 Deno 文档示例里的 `npm:pg` 客户端。
+
+### 2. 配置环境变量
+
+在 Deno Deploy 项目设置里添加：
+
+| 变量名 | 必填 | 说明 |
+| --- | --- | --- |
+| `ADMIN_USERNAME` | 推荐 | 后台登录用户名，未设置时默认 `admin` |
+| `ADMIN_PASSWORD` | 二选一 | 后台登录密码 |
+| `ADMIN_PASSWORD_HASH` | 二选一 | 后台登录密码的 SHA-256 哈希，优先级高于 `ADMIN_PASSWORD` |
+| `SESSION_TTL_SECONDS` | 否 | 登录会话有效期，默认 `604800` 秒 |
+| `APP_NAME` | 否 | 页面标题，默认 `New API Auto Check-in` |
+| `LOG_RETENTION_DAYS` | 否 | 日志保留天数，默认 `7` |
+| `DATABASE_BACKEND` | 否 | `auto`、`kv` 或 `postgres`，默认 `auto` |
+| `DATABASE_URL` / `PGHOST` 等 | PostgreSQL 时需要 | Deno Deploy 绑定 PostgreSQL 后会自动注入 |
+| `CRON_SECRET` | 手动/外部触发时必填 | `/__cron/checkin` HTTP 触发接口的 Bearer Token |
+
+Deno Deploy 官方数据库能力目前支持 `Deno KV` 和 `PostgreSQL`，且一个 App 目前只能绑定一种数据库实例。项目默认 `DATABASE_BACKEND=auto`：检测到 `DATABASE_URL`、`PGHOST`、`PGDATABASE` 或 `PGUSER` 时使用 PostgreSQL，否则使用 `Deno.openKv()`。
+
+如果选择 PostgreSQL，项目启动时会执行 `CREATE TABLE IF NOT EXISTS` 初始化表结构。你也可以在 Deno Deploy 的 pre-deploy command 配置：
+
+```bash
+deno task migrate:postgres
+```
+
+### 3. 配置 Deno Cron
+
+入口文件内置了 Deno Cron：
+
+```ts
+Deno.cron('daily new-api check-in', '0 0 * * *', ...)
+```
+
+如果你的 Deno Deploy 项目启用了 Cron，它会每天 UTC `00:00` 自动运行，对应北京时间 `08:00`。同时项目保留了一个受密钥保护的 HTTP 触发口，便于手动触发或接入外部 Cron：
+
+```http
+POST https://your-project.deno.dev/__cron/checkin
+Authorization: Bearer {CRON_SECRET}
+```
+
+北京时间每天 `08:00` 对应 UTC `00:00`。
+
+Deno 版本可使用 `Deno KV` 或 `PostgreSQL`，不需要创建 D1，也不需要执行 `schema.sql`。不同存储后端是独立数据，迁移平台时需要通过 WebUI 的 JSON 导入导出思路自行搬迁站点配置。
+
 ## 配置项
 
 `wrangler.toml` 中的公开变量：
@@ -250,6 +334,9 @@ Secret 变量：
 | `ADMIN_PASSWORD` | 二选一 | 后台登录密码 |
 | `ADMIN_PASSWORD_HASH` | 二选一 | 后台登录密码的 SHA-256 哈希，优先级高于 `ADMIN_PASSWORD` |
 | `SESSION_TTL_SECONDS` | 否 | 登录会话有效期，默认 `604800` 秒 |
+| `DATABASE_BACKEND` | Deno 可选 | `auto`、`kv` 或 `postgres` |
+| `DATABASE_URL` / `PGHOST` 等 | Deno PostgreSQL 时需要 | Deno Deploy 绑定 PostgreSQL 后自动注入 |
+| `CRON_SECRET` | Deno 手动/外部触发时必填 | Deno HTTP 触发接口的 Bearer Token，Cloudflare 不需要 |
 
 ## 定时任务
 
@@ -257,10 +344,10 @@ Secret 变量：
 
 ```toml
 [triggers]
-crons = ["0 8 * * *"]
+crons = ["0 0 * * *"]
 ```
 
-Cloudflare Cron 使用 UTC 时间，所以 `0 8 * * *` 表示每天 UTC `08:00`，对应北京时间 `16:00`。
+Cloudflare Cron 使用 UTC 时间，所以 `0 0 * * *` 表示每天 UTC `00:00`，对应北京时间 `08:00`。Deno Deploy 入口内置同样的 `Deno.cron` 计划，也可以用 `/__cron/checkin` 做手动或外部 Cron 触发。
 
 定时任务会执行两件事：
 
@@ -366,6 +453,9 @@ WebUI 支持上传 `.json` 文件或直接粘贴 JSON 数组。
 | `npm run build:server` | 构建服务器版到 `dist/` |
 | `npm run start:server` | 运行已构建的服务器版 |
 | `npm run deploy` | 部署到 Cloudflare Workers |
+| `npm run deno:dev` | 本地启动 Deno 服务 |
+| `npm run deno:check` | 使用 Deno 检查 Deno 入口 |
+| `npm run deno:migrate:postgres` | 初始化 Deno PostgreSQL 表结构 |
 | `npm run db:migrate:local` | 初始化本地 D1 表结构 |
 | `npm run db:migrate:remote` | 初始化线上 D1 表结构 |
 | `npm run cf-typegen` | 生成 Cloudflare 类型定义 |
@@ -395,7 +485,7 @@ npx wrangler secret list
 
 目标 New API 站点可能对 `POST /api/user/checkin` 强制启用了 Turnstile。后端定时任务无法像浏览器用户一样完成交互校验，需要目标站点配合提供机器签到接口，或对受信任机器调用关闭该接口的 Turnstile 校验。
 
-### D1 空间增长太快
+### 存储空间增长太快
 
 当前默认保留最近 `7` 天日志。可以在 `wrangler.toml` 修改：
 
@@ -409,14 +499,16 @@ LOG_RETENTION_DAYS = "3"
 npm run deploy
 ```
 
+Deno Deploy 则在环境变量里修改 `LOG_RETENTION_DAYS`。
+
 ### 改定时执行时间
 
 Cloudflare Cron 使用 UTC 时间。北京时间比 UTC 快 8 小时。
 
-例如北京时间每天 `16:00`：
+例如北京时间每天 `08:00`：
 
 ```toml
-crons = ["0 8 * * *"]
+crons = ["0 0 * * *"]
 ```
 
 修改后重新部署：

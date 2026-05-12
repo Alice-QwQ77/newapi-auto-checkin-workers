@@ -1,5 +1,8 @@
 node_modules/
 .wrangler/
 .dev.vars
+.dev.vars.example
 dist/
 data/
+*.saz
+new-api/
